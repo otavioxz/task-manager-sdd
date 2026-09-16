@@ -11,7 +11,13 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY src ./src
 
-RUN addgroup -S app && adduser -S app -G app
+# Atualiza pacotes do SO (patches de seguranca) e remove o npm/npx/corepack:
+# a imagem so precisa do binario "node" para rodar, e o npm embutido carrega
+# suas proprias dependencias (tar, glob, minimatch, sigstore, pacote...) que
+# geram falsos positivos de CVE irrelevantes para o runtime da app.
+RUN apk update && apk upgrade --no-cache \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+  && addgroup -S app && adduser -S app -G app
 USER app
 
 EXPOSE 3000

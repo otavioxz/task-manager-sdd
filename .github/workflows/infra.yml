@@ -1,0 +1,55 @@
+name: Infra (Terraform)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'plan ou apply'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+
+jobs:
+  scan:
+    name: Trivy - scan do IaC
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy - configuracao Terraform
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: config
+          scan-ref: infra
+          severity: CRITICAL,HIGH
+          exit-code: 1
+
+  terraform:
+    name: Terraform ${{ inputs.action }}
+    needs: scan
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - run: terraform init
+
+      - run: terraform plan -var="ssh_allowed_cidr=${{ secrets.SSH_ALLOWED_CIDR }}" -out=tfplan
+
+      - name: Terraform apply
+        if: inputs.action == 'apply'
+        run: terraform apply -auto-approve tfplan
